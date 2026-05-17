@@ -102,8 +102,8 @@ def _save_context_plot(df, out_dir):
     return path
 
 
-def save_projection_plots(df_data, rows_base, rows_ref, rows_int, empirical_zd,
-                          base_zd, ref_zd, int_zd, sim_base, sim_ref, sim_int, out_dir):
+def save_projection_plots(df_data, rows_counterfactual, rows_baseline, rows_scale_up, empirical_zd,
+                          baseline_zd, scale_up_zd, sim_counterfactual, sim_baseline, sim_scale_up, out_dir):
     """ Context + outcome plots for the reference/intervention projection. """
     paths = []
     if df_data is not None:
@@ -131,7 +131,7 @@ def save_projection_plots(df_data, rows_base, rows_ref, rows_int, empirical_zd,
 
     p3 = os.path.join(out_dir, "zerodose_impact.png")
     labels = ["empirical\n(DTP1 proxy)", "baseline\n(calibrated)", "scale-up\n(intervention)"]
-    values = [empirical_zd * 100, ref_zd * 100, int_zd * 100]
+    values = [empirical_zd * 100, baseline_zd * 100, scale_up_zd * 100]
     colors = ["#2c3e50", "#7f8c8d", "#27ae60"]
     fig, ax = plt.subplots(figsize=(8, 4.5))
     bars = ax.bar(labels, values, color=colors)
@@ -143,29 +143,29 @@ def save_projection_plots(df_data, rows_base, rows_ref, rows_int, empirical_zd,
     ax.grid(axis="y", alpha=0.3)
     fig.tight_layout(); fig.savefig(p3, dpi=150); plt.close(fig); paths.append(p3)
 
-    years, ref, intr = align_rows(rows_ref, rows_int)
-    base_by_year = {int(r["calendar_year"]): r for r in (rows_base or [])}
+    years, base, intr = align_rows(rows_baseline, rows_scale_up)
+    counterfactual_by_year = {int(r["calendar_year"]): r for r in (rows_counterfactual or [])}
     if years:
         p4 = os.path.join(out_dir, "projection_zerodose_20y.png")
         fig, ax = plt.subplots(figsize=(9, 4))
-        ax.plot(years, [ref[y]["zerodose_under5_fraction"] * 100 for y in years], "o-", label="baseline")
+        ax.plot(years, [base[y]["zerodose_under5_fraction"] * 100 for y in years], "o-", label="baseline")
         ax.plot(years, [intr[y]["zerodose_under5_fraction"] * 100 for y in years], "s-", label="intervention")
         ax.set_ylabel("Zero-dose share (%)"); ax.set_xlabel("Calendar year"); ax.legend(); ax.grid(alpha=0.3)
         fig.tight_layout(); fig.savefig(p4, dpi=150); plt.close(fig); paths.append(p4)
 
         p5 = os.path.join(out_dir, "projection_tetanus_deaths.png")
         fig, ax = plt.subplots(figsize=(9, 4))
-        if base_by_year:
-            ax.plot(years, [base_by_year.get(y, {}).get("tetanus_deaths", np.nan) for y in years], "d--", color="#c0392b", label="no intervention")
-        ax.plot(years, [ref[y]["tetanus_deaths"] for y in years], "o-", color="#7f8c8d", label="current program")
+        if counterfactual_by_year:
+            ax.plot(years, [counterfactual_by_year.get(y, {}).get("tetanus_deaths", np.nan) for y in years], "d--", color="#c0392b", label="no intervention")
+        ax.plot(years, [base[y]["tetanus_deaths"] for y in years], "o-", color="#7f8c8d", label="current program")
         ax.plot(years, [intr[y]["tetanus_deaths"] for y in years], "s-", color="#27ae60", label="intervention")
         ax.set_ylabel("Tetanus deaths"); ax.set_xlabel("Calendar year"); ax.legend(); ax.grid(alpha=0.3)
         fig.tight_layout(); fig.savefig(p5, dpi=150); plt.close(fig); paths.append(p5)
 
-        if base_by_year:
+        if counterfactual_by_year:
             p5c = os.path.join(out_dir, "projection_cumulative_deaths_averted.png")
-            base_yearly = np.array([base_by_year.get(y, {}).get("tetanus_deaths", 0) for y in years], dtype=float)
-            ref_yearly = np.array([ref[y]["tetanus_deaths"] for y in years], dtype=float)
+            base_yearly = np.array([counterfactual_by_year.get(y, {}).get("tetanus_deaths", 0) for y in years], dtype=float)
+            ref_yearly = np.array([base[y]["tetanus_deaths"] for y in years], dtype=float)
             int_yearly = np.array([intr[y]["tetanus_deaths"] for y in years], dtype=float)
             cum_ref = np.cumsum(base_yearly - ref_yearly)
             cum_int = np.cumsum(base_yearly - int_yearly)
@@ -186,13 +186,13 @@ def save_projection_plots(df_data, rows_base, rows_ref, rows_int, empirical_zd,
             fig.savefig(p5c, dpi=150); plt.close(fig); paths.append(p5c)
 
     p6 = os.path.join(out_dir, "tetanus_reference_vs_intervention.png")
-    tb = np.asarray(sim_base.diseases["tetanus"].results.new_infections, dtype=float).ravel()
-    tr = np.asarray(sim_ref.diseases["tetanus"].results.new_infections, dtype=float).ravel()
-    ti = np.asarray(sim_int.diseases["tetanus"].results.new_infections, dtype=float).ravel()
-    tv = np.asarray(sim_ref.t.yearvec, dtype=float).ravel()
+    tb = np.asarray(sim_counterfactual.diseases["tetanus"].results.new_infections, dtype=float).ravel()
+    tr = np.asarray(sim_baseline.diseases["tetanus"].results.new_infections, dtype=float).ravel()
+    ti = np.asarray(sim_scale_up.diseases["tetanus"].results.new_infections, dtype=float).ravel()
+    tv = np.asarray(sim_baseline.t.yearvec, dtype=float).ravel()
     if tb.size and tb.size == tr.size == ti.size == tv.size:
-        years_rt, base_year, ref_year = align_rows(rows_base, rows_ref)
-        years_it, _, int_year = align_rows(rows_base, rows_int)
+        years_rt, cf_year, base_year = align_rows(rows_counterfactual, rows_baseline)
+        years_it, _, int_year = align_rows(rows_counterfactual, rows_scale_up)
         years_u5 = [y for y in years_rt if y in years_it]
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(9, 6), sharex=False)
         ax1.plot(tv, tb, label="baseline (no intervention)", color="#c0392b", alpha=0.85)
@@ -204,9 +204,9 @@ def save_projection_plots(df_data, rows_base, rows_ref, rows_int, empirical_zd,
         ax1.grid(alpha=0.3)
 
         if years_u5:
+            ax2.plot(years_u5, [cf_year[y]["zerodose_under5_fraction"] * 100 for y in years_u5],
+                     "o-", color="#c0392b", label="no intervention")
             ax2.plot(years_u5, [base_year[y]["zerodose_under5_fraction"] * 100 for y in years_u5],
-                     "o-", color="#c0392b", label="baseline")
-            ax2.plot(years_u5, [ref_year[y]["zerodose_under5_fraction"] * 100 for y in years_u5],
                      "o-", color="#7f8c8d", label="baseline")
             ax2.plot(years_u5, [int_year[y]["zerodose_under5_fraction"] * 100 for y in years_u5],
                      "o-", color="#27ae60", label="intervention")
