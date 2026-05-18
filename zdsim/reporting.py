@@ -23,21 +23,26 @@ FIGURE_MANIFEST = [
     (
         "zerodose_impact.png",
         "Figure 1. Zero-dose share (DTP1 proxy): administrative data vs "
-        "modelled reference and intervention scenarios at the end of the "
+        "modelled baseline and intervention scenarios at the end of the "
         "projection window.",
     ),
     (
         "projection_zerodose_20y.png",
         "Figure 2. Projected yearly zero-dose share among under-fives for the "
-        "reference (calibrated to the empirical proxy) and intervention "
+        "baseline (calibrated to the empirical proxy) and intervention "
         "(scaled-up routine delivery) scenarios.",
     ),
     (
         "tetanus_reference_vs_intervention.png",
         "Figure 3. Tetanus module trajectories and cumulative case counts "
-        "(reference vs intervention). Counts are modelled infections in the "
+        "(baseline vs intervention). Counts are modelled infections in the "
         "simulated cohort; see methodology for the scaling factor used when "
         "translating to a national cohort.",
+    ),
+    (
+        "tetanus_case_comparison.png",
+        "Figure 3b. Total tetanus infections over the full projection window "
+        "for no-intervention, baseline, and scale-up scenarios.",
     ),
     (
         "projection_tetanus_deaths.png",
@@ -477,8 +482,22 @@ def _results_paragraphs(summary, styles):
     death_b = _safe_get(summary, "projection_tetanus_death_benefit_summary", default={}) or {}
     tet = _safe_get(summary, "research_question_tetanus", "modeled_answer", default={}) or {}
     scaled = _safe_get(summary, "population_scaled_projection", default={}) or {}
+    baseline_total = float(tet.get("baseline_total", 0.0) or 0.0)
+    intervention_total = float(tet.get("inv_total", 0.0) or 0.0)
+    case_red_pct = 100.0 * (baseline_total - intervention_total) / baseline_total if baseline_total > 0 else 0.0
 
     items = [
+        Paragraph("At-a-glance impact", styles["Sub"]),
+        Paragraph(
+            f"Primary target met: under-five zero-dose falls from "
+            f"<b>{_fmt_pct(ref)}</b> to <b>{_fmt_pct(scl)}</b> "
+            f"(<b>{_fmt_num(red, 1)}%</b> relative reduction). "
+            f"In the simulated cohort, tetanus cases fall from "
+            f"<b>{_fmt_int(baseline_total)}</b> to <b>{_fmt_int(intervention_total)}</b> "
+            f"(averted <b>{_fmt_int(tet.get('tetanus_cases_averted_total'))}</b>, "
+            f"{_fmt_num(case_red_pct, 2)}% relative reduction).",
+            styles["Body"],
+        ),
         Paragraph("Zero-dose share", styles["Sub"]),
         Paragraph(
             f"At the end of the projection window the modelled zero-dose "
@@ -500,7 +519,8 @@ def _results_paragraphs(summary, styles):
             f"<b>{_fmt_int(tet.get('tetanus_cases_averted_total'))}</b> "
             f"tetanus cases over {_fmt_num(summary.get('years'), 0)} years "
             f"(baseline {_fmt_int(tet.get('baseline_total'))} vs "
-            f"intervention {_fmt_int(tet.get('inv_total'))}).",
+            f"intervention {_fmt_int(tet.get('inv_total'))}, "
+            f"{_fmt_num(case_red_pct, 2)}% relative reduction).",
             styles["Body"],
         ),
         Paragraph("Tetanus deaths", styles["Sub"]),

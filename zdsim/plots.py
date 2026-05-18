@@ -137,6 +137,17 @@ def save_projection_plots(df_data, rows_counterfactual, rows_baseline, rows_scal
     bars = ax.bar(labels, values, color=colors)
     for bar, v in zip(bars, values):
         ax.text(bar.get_x() + bar.get_width() / 2, v + 1.0, f"{v:.1f}%", ha="center", va="bottom", fontsize=9)
+    if baseline_zd > 0:
+        rel_red = 100.0 * (baseline_zd - scale_up_zd) / baseline_zd
+        ax.text(
+            0.02, 0.96,
+            f"Baseline to scale-up: {rel_red:.1f}% relative reduction",
+            transform=ax.transAxes,
+            ha="left",
+            va="top",
+            fontsize=9,
+            bbox=dict(boxstyle="round,pad=0.2", facecolor="#f7f7f7", edgecolor="#cccccc", alpha=0.9),
+        )
     ax.set_ylabel("Zero-dose share among under-fives (%)")
     ax.set_title("Model validation: data vs baseline vs intervention")
     ax.set_ylim(0, max(values) * 1.15 + 2)
@@ -159,6 +170,12 @@ def save_projection_plots(df_data, rows_counterfactual, rows_baseline, rows_scal
             ax.plot(years, [counterfactual_by_year.get(y, {}).get("tetanus_deaths", np.nan) for y in years], "d--", color="#c0392b", label="no intervention")
         ax.plot(years, [base[y]["tetanus_deaths"] for y in years], "o-", color="#7f8c8d", label="current program")
         ax.plot(years, [intr[y]["tetanus_deaths"] for y in years], "s-", color="#27ae60", label="intervention")
+        if years:
+            baseline_total = float(np.nansum([base[y]["tetanus_deaths"] for y in years]))
+            intervention_total = float(np.nansum([intr[y]["tetanus_deaths"] for y in years]))
+            if baseline_total > 0:
+                death_red = 100.0 * (baseline_total - intervention_total) / baseline_total
+                ax.set_title(f"Tetanus deaths by scenario ({death_red:.2f}% reduction vs baseline)")
         ax.set_ylabel("Tetanus deaths"); ax.set_xlabel("Calendar year"); ax.legend(); ax.grid(alpha=0.3)
         fig.tight_layout(); fig.savefig(p5, dpi=150); plt.close(fig); paths.append(p5)
 
@@ -191,6 +208,12 @@ def save_projection_plots(df_data, rows_counterfactual, rows_baseline, rows_scal
     ti = np.asarray(sim_scale_up.diseases["tetanus"].results.new_infections, dtype=float).ravel()
     tv = np.asarray(sim_baseline.t.yearvec, dtype=float).ravel()
     if tb.size and tb.size == tr.size == ti.size == tv.size:
+        total_cf = float(np.sum(tb))
+        total_base = float(np.sum(tr))
+        total_int = float(np.sum(ti))
+        averted_vs_base = total_base - total_int
+        averted_vs_cf = total_cf - total_int
+
         years_rt, cf_year, base_year = align_rows(rows_counterfactual, rows_baseline)
         years_it, _, int_year = align_rows(rows_counterfactual, rows_scale_up)
         years_u5 = [y for y in years_rt if y in years_it]
@@ -200,6 +223,13 @@ def save_projection_plots(df_data, rows_counterfactual, rows_baseline, rows_scal
         ax1.plot(tv, ti, label="intervention", color="#27ae60", alpha=0.85)
         ax1.set_ylabel("New tetanus infections (all ages)")
         ax1.set_title("Tetanus trajectories by scenario")
+        if total_base > 0:
+            case_red = 100.0 * averted_vs_base / total_base
+            note = f"Averted vs baseline: {averted_vs_base:,.0f} ({case_red:.2f}%)"
+            ax1.text(
+                0.02, 0.96, note, transform=ax1.transAxes, ha="left", va="top", fontsize=9,
+                bbox=dict(boxstyle="round,pad=0.2", facecolor="#f7f7f7", edgecolor="#cccccc", alpha=0.9),
+            )
         ax1.legend()
         ax1.grid(alpha=0.3)
 
@@ -221,6 +251,94 @@ def save_projection_plots(df_data, rows_counterfactual, rows_baseline, rows_scal
         fig.savefig(p6, dpi=150)
         plt.close(fig)
         paths.append(p6)
+
+        p7 = os.path.join(out_dir, "tetanus_case_comparison.png")
+        year_start = int(np.floor(tv.min()))
+        year_stop = int(np.ceil(tv.max()))
+        n_years = max(year_stop - year_start, 1)
+        red_base_vs_cf = 100.0 * (total_cf - total_base) / total_cf if total_cf > 0 else 0.0
+        red_int_vs_cf = 100.0 * averted_vs_cf / total_cf if total_cf > 0 else 0.0
+        red_int_vs_base = 100.0 * averted_vs_base / total_base if total_base > 0 else 0.0
+        averted_base_vs_cf = total_cf - total_base
+
+        labels = [
+            "No intervention\n(no DTP routine)",
+            "Baseline\n(current DTP)",
+            "Scale-up\n(intervention)",
+        ]
+        vals = [total_cf, total_base, total_int]
+        cols = ["#c0392b", "#7f8c8d", "#27ae60"]
+
+        fig, (ax_l, ax_r) = plt.subplots(
+            1, 2, figsize=(13, 5.5), gridspec_kw={"width_ratios": [1, 1.1]}
+        )
+
+        vmin = min(vals)
+        vmax = max(vals)
+        span = vmax - vmin
+        y_lo = max(0, vmin - span * 0.8)
+        y_hi = vmax + span * 0.8
+        bars_l = ax_l.bar(labels, vals, color=cols, edgecolor="#333", linewidth=0.5)
+        ax_l.set_ylim(y_lo, y_hi)
+        for b, v in zip(bars_l, vals):
+            cx = b.get_x() + b.get_width() / 2
+            ax_l.text(cx, v + span * 0.05, f"{v:,.0f}",
+                      ha="center", va="bottom", fontsize=10, fontweight="bold")
+        ax_l.set_ylabel("Total tetanus infections, projection window")
+        ax_l.set_title(f"Totals — {year_start}–{year_stop} ({n_years} yrs)")
+        ax_l.grid(axis="y", alpha=0.3)
+        ax_l.set_axisbelow(True)
+        ax_l.text(
+            0.98, 0.02,
+            f"y-axis zoomed: starts at {y_lo:,.0f}",
+            transform=ax_l.transAxes, ha="right", va="bottom",
+            fontsize=7.5, style="italic", color="#666",
+        )
+
+        averted_labels = ["Baseline\nvs no-intv.", "Scale-up\nvs no-intv.",
+                          "Scale-up\nvs baseline"]
+        averted_vals = [averted_base_vs_cf, averted_vs_cf, averted_vs_base]
+        averted_pct = [red_base_vs_cf, red_int_vs_cf, red_int_vs_base]
+        averted_cols = ["#7f8c8d", "#27ae60", "#1e7e3a"]
+        bars_r = ax_r.bar(averted_labels, averted_vals,
+                          color=averted_cols, edgecolor="#333", linewidth=0.5)
+        ax_r.axhline(0, color="k", linewidth=0.6)
+        amax = max(averted_vals) if max(averted_vals) > 0 else 1.0
+        ax_r.set_ylim(0, amax * 1.25)
+        for b, v, pct in zip(bars_r, averted_vals, averted_pct):
+            cx = b.get_x() + b.get_width() / 2
+            ax_r.text(cx, v + amax * 0.03, f"{v:,.0f}",
+                      ha="center", va="bottom", fontsize=10, fontweight="bold")
+            ax_r.text(cx, v + amax * 0.11, f"({pct:.2f}%)",
+                      ha="center", va="bottom", fontsize=8, color="#444")
+        ax_r.set_ylabel("Cases averted over projection window")
+        ax_r.set_title("Cases averted (relative impact)")
+        ax_r.grid(axis="y", alpha=0.3)
+        ax_r.set_axisbelow(True)
+
+        fig.suptitle(
+            f"Scenario comparison: total tetanus burden, {year_start}–{year_stop}",
+            fontsize=12, y=0.99,
+        )
+
+        footer = (
+            "Left: total infections per scenario (y-axis zoomed to show small differences). "
+            "Right: cases averted vs the reference scenario, with relative reduction. "
+            "Scenarios — No intervention: no DTP routine (counterfactual). "
+            "Baseline: current DTP routine (calibrated). "
+            "Scale-up: intervention with higher routine coverage."
+        )
+        fig.subplots_adjust(bottom=0.22, top=0.88, wspace=0.3)
+        fig.text(
+            0.01, 0.01, footer,
+            ha="left", va="bottom", fontsize=7.5, wrap=True,
+            bbox=dict(boxstyle="round,pad=0.3", facecolor="#f7f7f7",
+                      edgecolor="#cccccc", alpha=0.9),
+        )
+
+        fig.savefig(p7, dpi=150)
+        plt.close(fig)
+        paths.append(p7)
     return paths
 
 

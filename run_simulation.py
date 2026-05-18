@@ -236,6 +236,22 @@ def run_demo(*, n_agents, start, stop, seed, seed_intervention, out_dir, data_pa
                 modeled_zero_dose_relative_reduction_percent_end_window=float(rel),
             ),
         ),
+        headline_impact=dict(
+            projection_window=f"{int(start)}-{int(stop)}",
+            zero_dose_under5_baseline=float(base["zd"]),
+            zero_dose_under5_scale_up=float(intr["zd"]),
+            zero_dose_under5_relative_reduction_percent=float(rel),
+            tetanus_cases_baseline=float(base["tetanus"]["total"]),
+            tetanus_cases_scale_up=float(intr["tetanus"]["total"]),
+            tetanus_cases_averted=float(tet_averted),
+            tetanus_cases_relative_reduction_percent=float(
+                100.0 * tet_averted / base["tetanus"]["total"]
+            ) if base["tetanus"]["total"] > 0 else 0.0,
+            tetanus_deaths_averted=float(tetanus_deaths_averted),
+            scaled_zero_dose_children_reached_at_end=int(round((base["zd"] - intr["zd"]) * KENYA_UNDER5_POPULATION)),
+            scaled_tetanus_cases_averted=int(round(tet_averted * scale)),
+            scaled_tetanus_deaths_averted=int(round(tetanus_deaths_averted * scale)),
+        ),
         population_scaled_projection=dict(
             anchor_label="Kenya national 2024 anchors",
             anchor_source=KENYA_ANCHOR_SOURCE,
